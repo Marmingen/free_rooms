@@ -11,14 +11,24 @@ from bs4 import BeautifulSoup
 ## ROOM CLASS
 
 class Room():
-    def __init__(self, url=""):
+    
+    def __init__(self, name="Undefined Room", url=""):
+        
+        def __room_info():
+            if len(self.name) < 6:
+                self.house = int(self.name[0])
+            else:
+                self.house = 10
+        
+        self.name = name
         self.url = url
-        self.name = "Undefined Room"
-        self.floor = -1
-        self.room = -1
+        self.house = -1
         self.booked_times = []
         self.free_times = []
-        self.all_day = -1
+        self.all_day = 0
+        self.free_now = 0
+        
+        __room_info()
     
     ## magic methods ##
     
@@ -36,29 +46,13 @@ class Room():
             soup = BeautifulSoup(self.page.content, "html.parser")
             
             self.today = soup.find(class_="headline t dateIsToday")
-            self.__update_day_list(soup)
             self.all_day = self.__occupied_times()
             self.__free_times()
             
         else:
             print("url is not set")
-            
-    def set_url(self, name, in_url):
-        def __room_info():
-            if len(self.name) < 6:
-                self.floor = int(self.name[0])
-            else:
-                self.floor = 10
-        
-        self.name = name
-        self.url = in_url
-        self.page = requests.get(self.url)
-        __room_info()
 
     ## secret methods ##
-
-    def __update_day_list(self, soup):
-        self.days = [day.text[4:15].strip() for day in soup.find_all(class_="headline t")]
         
     def __occupied_times(self):
         """saves all occupied sessions in self.times"""
@@ -74,6 +68,8 @@ class Room():
             while next_instance and not next_instance.find(class_="headline t"):
                 occupied_time = next_instance.find(class_="time tt c-2").text
                 self.booked_times.append(tuple(occupied_time.split(" - ")))
+                
+                # check next <tr>
                 next_instance = next_instance.find_next("tr")
             return 0
         
@@ -95,27 +91,38 @@ class Room():
             otherwise returns ("HH:MM", "HH:MM") of free time"""
             
             # checks if check_time is within the booked time
-            if __supertime(check_time) > __supertime(booking[0]) and __supertime(check_time) < __supertime(booking[1]):
+            if __supertime(check_time) >= __supertime(booking[0]) and __supertime(check_time) < __supertime(booking[1]):
                 return None
             # checks if check_time is after the booked time
-            if __supertime(check_time) > __supertime(booking[1]):
+            if __supertime(check_time) >= __supertime(booking[1]):
                 return None
             
             return (check_time, booking[0])
             
-            
-            
         # now is GMT+2
         now = time.strftime("%H:%M",time.gmtime(time.time()+2*60**2))
         
-        print(__get_time_difference(now, self.booked_times[0]))
+        check_time = now
         
         for i in range(len(self.booked_times)):
-                                    
+
             # discards 15min free times
-            if i != len(self.booked_times) - 1 and self.booked_times[i][1][:3] + "15" == self.booked_times[i+1][0]:
+            if check_time[:3] + "15" == self.booked_times[i][0]:
+                check_time = self.booked_times[i][1]
                 continue
             
+            free_timeslot = __get_time_difference(check_time, self.booked_times[i])
+            
+            if free_timeslot:
+                self.free_times.append(free_timeslot)
+            if check_time == now:
+                self.free_now = 1
+            
+            # checks the next time
+            check_time = self.booked_times[i][1]
+        
+        # appends the last booked time to the days end
+        self.free_times.append((check_time,"00:00"))
             
 ###########################################################################
 ## MAIN
@@ -130,6 +137,8 @@ def main():
     ROOM.set_url("4001", URL2)
     
     ROOM.update_info()
+    
+    print(ROOM.free_times)
     
     print(time.strftime("%Y-%m-%d",time.localtime()))
     
